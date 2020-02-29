@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+### HPC Stage Tools:
+### Stages a file to the STAGE_IN folder
+###
+### Usage:
+###  stage_file [options] file
+###
+### Options:
+###  --help         This help
+###  --version      Print version
+###
+### Example:
+###  stage_file /path/to/large.txt
+###
+### Details:
+### This tool transfers a file to the STAGE_IN folder, where 'STAGE_IN'
+### defaults to $TMPDIR/stage_in.  The method used for transfering files
+### is given by 'STAGE_METHOD', which can be 'rsync' (default) or 'cp'.
+###
+### Version: 0.0.0-9000
+### Copyright: Henrik Bengtsson (2020)
+### License: GPL (>= 3) [https://www.gnu.org/licenses/gpl.html]
+
+call="$0 $*"
+args="$*"
+tool_name=$(basename "$0")
+
+mecho() { echo "$@" 1>&2; }
+
+merror() {
+    mecho "ERROR in '${tool_name}': $*"
+    exit 1
+}
+
+assert_file() {
+    [[ -f "$1" ]] || merror "No such file: '$1'"
+}
+
+assert_dir() {
+    [[ -d "$1" ]] || merror "No such directory: '$1'"
+}
+
+function version() {
+    grep -E "^###[ ]*Version:[ ]*" "$0" | sed 's/###[ ]*Version:[ ]*//g'
+}
+
+function help() {
+    local res
+    local search
+    res=$(grep -E "^###( .*|)$" "$0" | cut -b 5-)
+    search=$(basename "$0")
+    if [[ "${search}" != "${tool_name}" ]]; then
+        res=$(printf '%s\n' "${res[@]}" | sed "s/${search}/${tool_name}/g")
+    fi
+    printf '%s\n' "${res[@]}"
+}
+
+stage_cp() {
+  assert_file "$1"
+  if [[ "$STAGE_METHOD" == "rsync" ]]; then
+    rsync --links --perms --acls --xattrs --group --compress "$1" "$2"
+  elif [[ "$STAGE_METHOD" == "cp" ]]; then
+    cp "$1" "$2"
+  else
+    merror "Unknown value on STAGE_METHOD: '$STAGE_METHOD'"
+  fi
+  assert_file "$2"
+}
+
+STAGE_IN_ROOT=${STAGE_IN_ROOT:-$TMPDIR}
+STAGE_IN=${STAGE_IN:-$STAGE_IN_ROOT/stage_in}
+STAGE_METHOD=${STAGE_METHOD:-rsync}
+
+[[ -z "$STAGE_IN_ROOT" ]] && merror "STAGE_IN_ROOT empty"
+[[ -z "$STAGE_IN" ]] && merror "STAGE_IN empty"
+[[ -z "$STAGE_METHOD" ]] && merror "STAGE_METHOD empty"
+
+debug=false
+pathname=
+
+# Parse command-line options
+while [[ $# -gt 0 ]]; do
+    if [[ "$1" == "--help" ]]; then
+        help
+        exit 0
+    elif [[ "$1" == "--version" ]]; then
+        version
+        exit 0
+    elif [[ "$1" == "--debug" ]]; then
+        debug=true
+    else
+	if [[ -n "$pathname" ]]; then
+	    merror "File already specified. Unknown argument: '$1'"
+	fi
+        pathname="$1"
+    fi
+    shift
+done
+
+
+if $debug; then
+    >&2 echo "tool_name: ${tool_name}"
+    >&2 echo "call: ${call}"
+    >&2 echo "args: ${args}"
+    >&2 echo "STAGE_METHOD=${STAGE_METHOD}"
+    >&2 echo "STAGE_IN=${STAGE_IN}"
+    >&2 echo "pathname=$pathname"
+fi
+
+mkdir -p "$STAGE_IN"
+assert_dir "$STAGE_IN"
+
+filename=$(basename "$pathname")
+stage_cp "$pathname" "$STAGE_IN/$filename"
+
+if $debug; then
+    ls -la "$STAGE_IN"
+fi
