@@ -6,11 +6,14 @@
 ###  stage_file [options] file
 ###
 ### Options:
+###  --debug        Print debug details to standard error
 ###  --help         This help
+###  --silent       No output
 ###  --version      Print version
 ###
 ### Example:
 ###  stage_file /path/to/large.txt
+###  stage_pathname=$(stage_file /path/to/large.txt)
 ###
 ### Details:
 ### This tool transfers a file to the STAGE_IN folder, where 'STAGE_IN'
@@ -76,6 +79,7 @@ STAGE_METHOD=${STAGE_METHOD:-rsync}
 [[ -z "$STAGE_METHOD" ]] && merror "STAGE_METHOD empty"
 
 debug=false
+silent=false
 pathname=
 
 # Parse command-line options
@@ -88,6 +92,8 @@ while [[ $# -gt 0 ]]; do
         exit 0
     elif [[ "$1" == "--debug" ]]; then
         debug=true
+    elif [[ "$1" == "--silent" ]]; then
+        silent=true
     else
 	if [[ -n "$pathname" ]]; then
 	    merror "File already specified. Unknown argument: '$1'"
@@ -104,6 +110,7 @@ if $debug; then
     >&2 echo "args: ${args}"
     >&2 echo "STAGE_METHOD=${STAGE_METHOD}"
     >&2 echo "STAGE_IN=${STAGE_IN}"
+    >&2 echo "silent=$silent"
     >&2 echo "pathname=$pathname"
 fi
 
@@ -111,8 +118,11 @@ mkdir -p "$STAGE_IN"
 assert_dir "$STAGE_IN"
 
 filename=$(basename "$pathname")
-stage_cp "$pathname" "$STAGE_IN/$filename"
+target=$STAGE_IN/$filename
+stage_cp "$pathname" "$target"
 
 if $debug; then
     ls -la "$STAGE_IN"
 fi
+
+$silent || echo "$target"
